@@ -1,4 +1,5 @@
 use crate::config::get_config;
+use crate::progress_row::ProgressRow;
 use crate::protos::generated_proto::query::query_response::Item;
 use crate::providers::PROVIDERS;
 use crate::state::{get_dmenu_current, is_grid, is_hide_qa, set_error};
@@ -9,6 +10,7 @@ use gtk4::gio::File;
 use gtk4::gio::prelude::FileExt;
 use gtk4::prelude::{ListItemExt, WidgetExt};
 use gtk4::{Box, Builder, DragSource, Label, ListItem, glib};
+use gtk4::glib::prelude::{Cast, ObjectExt};
 use std::path::Path;
 
 pub fn create_item(list_item: &ListItem, item: &Item, theme: &Theme) {
@@ -30,25 +32,32 @@ pub fn create_item(list_item: &ListItem, item: &Item, theme: &Theme) {
         )
     };
 
-    let itembox: Box = match b.object("ItemBox") {
-        Some(w) => w,
-        None => {
-            set_error("Theme: missing 'ItemBox' object".to_string());
-
-            b = Builder::new();
-
-            with_themes(|t| {
-                let theme = t.get("default").unwrap();
-                let _ = b.add_from_string(
-                    theme
-                        .items
-                        .get(&item.provider)
-                        .expect("failed to get item layout"),
-                );
-            });
-
-            b.object("ItemBox").unwrap()
+    let mut progress_row = None;
+    let itembox: Box = match b.object::<ProgressRow>("ItemBox") {
+        Some(w) => {
+            progress_row = Some(w.clone());
+            w.upcast()
         }
+        None => match b.object::<Box>("ItemBox") {
+            Some(w) => w,
+            None => {
+                set_error("Theme: missing 'ItemBox' object".to_string());
+
+                b = Builder::new();
+
+                with_themes(|t| {
+                    let theme = t.get("default").unwrap();
+                    let _ = b.add_from_string(
+                        theme
+                            .items
+                            .get(&item.provider)
+                            .expect("failed to get item layout"),
+                    );
+                });
+
+                b.object("ItemBox").unwrap()
+            }
+        },
     };
 
     itembox.add_css_class(&item.provider.replace("menus:", "menus-"));
@@ -76,6 +85,13 @@ pub fn create_item(list_item: &ListItem, item: &Item, theme: &Theme) {
 
     if let Some(text) = b.object::<Label>("ItemSubtext") {
         p.subtext_transformer(item, &text);
+    }
+
+    if let Some(ref pr) = progress_row {
+        if let Some(fraction) = parse_fraction(&item.subtext) {
+            pr.set_property("fraction", fraction);
+            pr.set_property("color", "#6c6c6c6c");
+        }
     }
 
     p.image_transformer(&b, list_item, item);
@@ -114,4 +130,10 @@ pub fn create_drag_source(text: &str) -> DragSource {
     drag_source.connect_drag_begin(|_, _| with_window(|w| w.window.set_visible(false)));
     drag_source.connect_drag_end(|_, _, _| with_window(|w| quit(&w.app, false)));
     drag_source
+}
+
+fn parse_fraction(text: &str) -> Option<f64> {
+    let num_str: String = text.chars().filter(|c| c.is_ascii_digit() || *c == '.').collect();
+    let val = num_str.parse::<f64>().ok()?;
+    Some((val / 100.0).clamp(0.0, 1.0))
 }

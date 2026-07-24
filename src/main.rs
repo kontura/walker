@@ -2,6 +2,7 @@ mod config;
 mod data;
 mod keybinds;
 mod preview;
+mod progress_row;
 mod protos;
 mod providers;
 mod renderers;
@@ -12,6 +13,7 @@ mod wayland_blur;
 use gtk4::gio::prelude::{ApplicationCommandLineExt, DataInputStreamExtManual, SettingsExt};
 use gtk4::gio::{self, ApplicationCommandLine, ApplicationHoldGuard};
 use gtk4::glib::Priority;
+use gtk4::glib::prelude::StaticType;
 use gtk4::prelude::{EntryExt, ListModelExt};
 
 use config::get_config;
@@ -41,6 +43,7 @@ use gtk4::{
 
 use crate::data::init_socket;
 use crate::keybinds::setup_binds;
+use crate::progress_row::ProgressRow;
 use crate::protos::QueryResponseObject;
 use crate::protos::generated_proto::query::{QueryResponse, query_response};
 use crate::providers::setup_providers;
@@ -769,6 +772,8 @@ fn apply_flag_logic() {
 }
 
 fn startup(app: &Application) {
+    ProgressRow::static_type();
+
     let args: Vec<String> = env::args().collect();
     let dmenu = args.contains(&"--dmenu".to_string()) || args.contains(&"-d".to_string());
     let version = args.contains(&"--version".to_string()) || args.contains(&"-v".to_string());
