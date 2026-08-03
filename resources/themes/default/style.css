@@ -3,6 +3,7 @@
 @define-color theme_fg_color #f2ecbc;
 @define-color error_bg_color #C34043;
 @define-color error_fg_color #DCD7BA;
+@define-color progressbar_color rgba(0, 0, 0, 0.2);
 
 * {
   all: unset;
@@ -179,6 +180,10 @@ row:selected .item-box {
 
 .keybind-button:hover {
   opacity: 0.75;
+}
+
+.progressbar-container {
+  border-radius: 10px;
 }
 
 .keybind-bind {

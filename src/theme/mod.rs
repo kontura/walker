@@ -2,17 +2,19 @@ use crate::config::get_config;
 use crate::providers::PROVIDERS;
 use crate::state::add_theme;
 use crate::ui::window::{set_css_provider, with_css_provider};
-use gtk4::gdk::Display;
+use gtk4::gdk::{Display, RGBA};
+use gtk4::gio::prelude::FileExt;
 use gtk4::prelude::GtkWindowExt;
 use gtk4::{CssProvider, Window, gio};
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::{env, fs};
 
 thread_local! {
     pub static THEMES: OnceCell<HashMap<String, Theme>> = OnceCell::new();
+    static CSS_TEXT: RefCell<Option<String>> = RefCell::new(None);
 }
 
 #[derive(Debug)]
@@ -244,6 +246,7 @@ pub fn setup_css(theme: String) {
                         match grass::from_string(scss, &options) {
                             Ok(css) => {
                                 p.load_from_string(&css);
+                                set_css_text(css);
                                 return;
                             }
                             Err(err) => {
@@ -252,16 +255,65 @@ pub fn setup_css(theme: String) {
                             }
                         }
                     }
-                };
-                if let Some(f) = &t.css {
-                    p.load_from_file(f);
-                    return;
-                } else {
-                    p.load_from_string(include_str!("../../resources/themes/default/style.css"));
                 }
+
+                if let Some(f) = &t.css {
+                    if let Some(path) = f.path()
+                        && let Ok(css) = fs::read_to_string(path)
+                    {
+                        p.load_from_string(&css);
+                        set_css_text(css);
+                    }
+                    return;
+                }
+
+                let css = include_str!("../../resources/themes/default/style.css").to_string();
+                p.load_from_string(&css);
+                set_css_text(css);
             });
         }
     });
+}
+
+fn set_css_text(css: String) {
+    CSS_TEXT.with(|s| *s.borrow_mut() = Some(css));
+}
+
+pub fn get_css_color(name: &str) -> Option<RGBA> {
+    let css = CSS_TEXT.with(|s| s.borrow().clone())?;
+    resolve_named_color(&css, name)
+}
+
+fn resolve_named_color(css: &str, name: &str) -> Option<RGBA> {
+    let value = css.lines().find_map(|line| {
+        let rest = line.trim().strip_prefix("@define-color")?.trim_start();
+        let mut parts = rest.split_whitespace();
+        let name_match = parts.next()?;
+        if name_match != name {
+            return None;
+        }
+        Some(parts.collect::<Vec<_>>().join(" "))
+    })?;
+
+    parse_color_value(css, value.trim_end_matches(';').trim())
+}
+
+fn parse_color_value(css: &str, value: &str) -> Option<RGBA> {
+    let value = value.trim();
+
+    if let Some(name) = value.strip_prefix('@') {
+        return resolve_named_color(css, name.trim());
+    }
+
+    if let Some(inner) = value.strip_prefix("alpha(").and_then(|s| s.strip_suffix(')')) {
+        let (color, alpha) = inner.rsplit_once(',')?;
+        let alpha: f32 = alpha.trim().parse().ok()?;
+        let mut color = parse_color_value(css, color.trim())?;
+        color.set_alpha(alpha);
+        return Some(color);
+    }
+
+    RGBA::parse(value).ok()
 }
 
 pub fn setup_css_provider() {
