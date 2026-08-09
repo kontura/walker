@@ -24,6 +24,7 @@ use crate::{
         dnfpackages::DnfPackages, emergency::Emergency, files::Files, providerlist::Providerlist,
         symbols::Symbols, todo::Todo, unicode::Unicode,
     },
+    ui::layoutmanager::PercentageLayoutManager,
 };
 
 pub mod actionsmenu;
@@ -157,6 +158,10 @@ pub trait Provider: Sync + Send + Debug {
 
     fn image_transformer(&self, b: &Builder, i: &ListItem, item: &Item) {
         shared_image_transformer(b, i, item);
+    }
+
+    fn progress_transformer(&self, _item: &Item, layout: PercentageLayoutManager) {
+        layout.set_percentage(0.0);
     }
 }
 
